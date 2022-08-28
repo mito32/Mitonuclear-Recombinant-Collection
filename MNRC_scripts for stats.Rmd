@@ -1,0 +1,1033 @@
+---
+title: "MNRC MS"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook associated with the following manuscript:
+A recombinant mapping yeast population identifies mitotic growth loci influencing mtDNA instability through mitonuclear interactions
+Tuc H.M. Nguyen, Austen Tinz-Burdick, Meghan Lenhardt, Margaret Geertz, Franchesca Ramirez, Mark Schwartz, Michael Toledano1, Brooke Bonney, Benjamin Gaebler, Weiwei Liu, John F. Wolters, Ken Chiu, Anthony C. Fiumera, Heather L. Fiumera
+
+Final figures edited in Inkscape.
+```{r}
+
+libraries<-c("car", "dplyr", "ggplot2", "ggpubr", "multcomp", "multcompView","tidyverse", "mixlm")
+lapply(libraries, require, character.only = TRUE )
+
+```
+
+##### import data for Fig 1 and Table S2, set factors and classes
+```{r}
+#import data
+data.wildisolates<-read.csv("parental_pet.csv", header = TRUE, stringsAsFactors = FALSE)
+data.S288c<-read.csv("S288c_pet.csv", header = TRUE, stringsAsFactors = FALSE)
+
+
+#set factors
+data.wildisolates$StrainID<-as.factor(data.wildisolates$StrainID)
+data.wildisolates$Nuclear<-as.factor(data.wildisolates$Nuclear)
+data.wildisolates$NucPop<-as.factor(data.wildisolates$NucPop)
+data.wildisolates$Mito<-as.factor(data.wildisolates$Mito)
+data.wildisolates$MitoPop<-as.factor(data.wildisolates$MitoPop)
+data.wildisolates$og_v_syn<-as.factor(data.wildisolates$og_v_syn)
+data.wildisolates$Genotype<-as.factor(data.wildisolates$Genotype)
+#set classes
+data.wildisolates$Petite<-as.numeric(data.wildisolates$Petite)
+data.wildisolates$Grande<-as.numeric(data.wildisolates$Grande)
+data.wildisolates$Total<-as.numeric(data.wildisolates$Total)
+
+```
+### Fig 1
+#### Genetic variation contributes to mtDNA loss. 
+
+Petite frequencies of S. cerevisiae wild isolates as boxplots.
+The populations as broadly defined in PMCID: 2659681, 6784862, and 4417123
+
+```{r}
+#reorganize isolates for a certain order
+data.wildisolates$Nuclear <- factor(data.wildisolates$Nuclear, levels=c("378604X","273614N","322134S","YJM981","YJM975","YJM978","BC187","DBVPG1373","L-1528","L-1374","DBVPG6765","YPS606","YPS128","UWOPS03-461.4","UWOPS05-227.2","UWOPS05-217.3","Y12","Y55","SK1","NCYC110","DBVPG6044"))
+#set colorblind palette
+cbbPalette2 <- c("WestAfrican" = "#E69F00","Sake" ="#D55E00","Malaysian"= "#CC79A7", "NorthAmerican"="#009E73","European"="#56B4E9" ,"mosaic"="#999999")
+
+Fig1<-ggplot(data.wildisolates,aes(x=Nuclear,y=PetFreq,fill=NucPop))+geom_boxplot()+
+  theme_bw()+ 
+  theme(plot.background = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.border = element_blank() ) +
+  theme(axis.line = element_line(color = 'black'))+
+  theme(axis.text.x = element_text(size = 10)) +scale_fill_manual(values=cbbPalette2)+
+  scale_y_continuous(breaks=seq(0,12,2))+
+  theme(legend.position = c(0.8,0.5))+
+  guides(fill=guide_legend(title="Population"))+
+  coord_flip()
+Fig1
+```
+Figure 1 insert for S288c
+```{r}
+#added as an insert in Inkscape
+#plotted in the same x axis spacing as above 
+bp_S288c<-ggplot(data.S288c,aes(x=Nuclear,y=PetFreq,fill=NucPop))+geom_boxplot()+
+  theme_bw()+ 
+  theme(plot.background = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.border = element_blank() ) +
+  theme(axis.line = element_line(color = 'black'))+
+  theme(axis.text.x = element_text(size = 10)) +scale_fill_manual(values=cbbPalette2)+
+  ylim(42,60)+
+  theme(legend.position = "none") +coord_flip()
+bp_S288c
+```
+#### Table S2: ANOVA 
+#### Petite frequencies vary by strain and population
+
+Are the differences in petite frequencies due to genetic variation in individuals isolates and/or populations?
+
+```{r}
+#The different numbers of petite/grande colonies counted in each assay are taken into account using cbind function
+#the family=binomial accounts for non-normal distribution of petite frequencies
+#the variable "Nuclear" is used instead of "StrainID" because there are both mata and x versions of some strains
+
+FM.cbind<-glm(cbind(data.wildisolates$Petite,data.wildisolates$Grande)~data.wildisolates$NucPop/data.wildisolates$Nuclear, family=binomial)
+
+anova(FM.cbind, test="Chisq")
+```
+
+
+
+
+
+
+
+#### Petite frequency averages for each population
+```{r}
+pop.means<-data.frame(tapply(predict(FM.cbind, type = "response"), data.wildisolates$NucPop, mean))
+pop.means
+```
+
+### Fig 2A,B, Table S3  
+#### Mitotype influences on petite frequencies are influenced by M4 GC clusters
+
+This section contains the analyses described in Figure 2A and B and Table S3.
+
+Analyzes the petite frequencies of strains with the Y55 nuclear genotype with different mtDNAs
+
+##### import data and set factors
+```{r}
+data.Y55<-read.csv("data.Y55.csv", header = TRUE, stringsAsFactors = FALSE)
+#set factors
+data.Y55$StrainID<-as.factor(data.Y55$StrainID)
+data.Y55$Nuclear<-as.factor(data.Y55$Nuclear)
+data.Y55$NucPop<-as.factor(data.Y55$NucPop)
+data.Y55$Mito<-as.factor(data.Y55$Mito)
+data.Y55$MitoPop<-as.factor(data.Y55$MitoPop)
+data.Y55$og_v_syn<-as.factor(data.Y55$og_v_syn)
+data.Y55$Genotype<-as.factor(data.Y55$Genotype)
+#set classes
+data.Y55$Petite<-as.numeric(data.Y55$Petite)
+data.Y55$Grande<-as.numeric(data.Y55$Grande)
+data.Y55$Total<-as.numeric(data.Y55$Total)
+```
+#### Petite frequencies averages for each genotype
+
+```{r}
+aggregate(PetFreq~Mito,data=data.Y55,mean)
+
+```
+
+#### Table S3: ANOVA 
+##### mtDNAs influence petite frequencies in the Y55 nuclear background 
+
+```{r}
+#Table S3 anova... Does mtDNA variation contribute to petite frequencies?
+FM.cbind2<-glm(cbind(data.Y55$Petite,data.Y55$Grande)~data.Y55$Mito, family=binomial)
+anova(FM.cbind2, test="Chisq")
+
+```
+### Correlations between mtDNA features and petite frequencies
+
+mtDNA analyses and correlations
+
+This sections contains the analyses for Fig 2A,2B and correlations described in text
+
+
+##### import and prepare data
+```{r}
+data.mtDNA_full<-read.table("nY55_pet_gc_intron_3.txt", header = TRUE, stringsAsFactors = FALSE)
+data.mtDNA_full$log2_pm<-log2(data.mtDNA_full$petfreq_mean)
+#subset data to just those that have pet freq in the Y55 mtDNA for analyzed mtDNAs
+data.mtDNA_Y55nuc<-data.mtDNA_full%>%dplyr::select(petfreq_mean,log2_pm, mtDNA,mtPop,Length,GC_percent,TotalGCcount,total_intronlength,M1,M2,M3,M4,M1p,M2p,M2pp,G,V,U)
+#remove rows with missing values
+  data.mtDNA_Y55nuc_complete<-data.mtDNA_Y55nuc[complete.cases(data.mtDNA_Y55nuc),]
+#test to see if normally distributed
+  hist(data.mtDNA_Y55nuc_complete$log2_pm)
+  shapiro.test(data.mtDNA_Y55nuc_complete$log2_pm)
+```
+
+### Fig 2A
+#### Plot
+
+Plots the petite frequencies of strains with the Y55 nuclear genotype and different mtDNAs vs. mtDNA GC content
+
+```{r}
+cols2<-c("WineEuro"= "blue","Malaysian" ="#E69F00","mosaic"="#999999", "NthAm"="#009E73", "WestAfr" = "#F0E442", "Sake" = "#D55E00")
+Fig2A<-ggplot(data=data.mtDNA_Y55nuc_complete, aes(x = GC_percent, y =petfreq_mean)) + 
+                geom_point(aes(color=mtPop),size=3.5) +
+                scale_color_manual(values=cols2)+
+                theme_bw()+ 
+                theme(plot.background = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.border = element_blank() ) +
+                theme(axis.line = element_line(color = 'black'))+
+                theme(axis.text.x = element_text(size = 10))+
+                theme(legend.position = "none")+
+                geom_smooth(method = "lm", se = FALSE, color="black")+
+                labs(x="mtDNA GC%",y="PetFreq")+theme(legend.position="none") 
+Fig2A
+```
+#### Correlation for Fig 2A:  Correlation between petite frequency and GC percent
+```{r}
+RM.GCp<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$GC_percent)
+        anova(RM.GCp) #GC_percent p =0.01341 *
+        summary(RM.GCp) #R^2 = 0.3435
+        Anova(RM.GCp) #GC_percent p =0.01341
+        cor.test.gcppet<-cor.test(data.mtDNA_Y55nuc_complete$GC_percent,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.gcppet #r=0.5861
+        cor.test.gcppet$p.value #GCpercent p = 0.01341*
+        cor.test.gcppet.p<-round(cor.test.gcppet$p.value,3)
+        cor.test.gcppet.p #p=0.013 *
+        cor.test.gcppet$estimate
+        cor.test.gcpet.r<-round(cor.test.gcppet$estimate)
+        cor.test.gcpet.r
+        gcppet.r<-round(cor.test.gcppet$estimate,2)
+        gcppet.r2<-round(cor.test.gcppet$estimate^2,2)
+        gcppet.r
+        gcppet.r2
+```
+### Fig 2B
+#### Plot
+#### petite frequency vs. M4 clusters
+
+Plots the petite frequencies of strains with the Y55 nuclear genotype and different mtDNAs vs. the numbers of M4-type GC clusters
+```{r}
+Fig2B<-ggplot(data=data.mtDNA_Y55nuc_complete, aes(x = M4, y =petfreq_mean)) + 
+                geom_point(aes(color=mtPop),size=3.5) +
+                scale_color_manual(values=cols2)+
+                theme_bw()+ 
+                theme(plot.background = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.border = element_blank() ) +
+                theme(axis.line = element_line(color = 'black'))+
+                theme(axis.text.x = element_text(size = 10))+
+                theme(legend.position = "none")+
+                geom_smooth(method = "lm", se = FALSE, color="black")+
+                labs(x="total M4-type GC clusters",y="PetFreq")+theme(legend.position="none")
+Fig2B
+```
+
+#### Correlation for Fig 2B
+#### Correlation between petite frequency and M4 cluster numbers
+```{r}
+RM.M4<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M4)
+        anova(RM.M4) #p= 0.003568 **
+        summary(RM.M4) #R^2 = 0.4425
+        Anova(RM.M4) #M4 p=
+        cor.test.m4<-cor.test(data.mtDNA_Y55nuc_complete$M4,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m4 #r=0.0.66521
+        cor.test.m4$p.value #M4 p =
+        cor.test.m4.p<-round(cor.test.m4$p.value,3)
+        cor.test.m4.p #m4 p=0.004 **
+        m4.r<-round(cor.test.m4$estimate,2)
+        m4.r2<-round(cor.test.m4$estimate^2,2)
+        m4.r
+        m4.r2
+```
+##### Other Correlations, some described in text
+
+Do GC cluster numbers and GC% correlate with each other? (yes)
+```{r}
+FM.gcc.gcp<-lm(data.mtDNA_Y55nuc_complete$GC_percent~data.mtDNA_Y55nuc_complete$TotalGCcount)
+      anova(FM.gcc.gcp) 
+      summary(FM.gcc.gcp) 
+      cor.test.gccgcp<-cor.test(data.mtDNA_Y55nuc_complete$TotalGCcount,data.mtDNA_Y55nuc_complete$GC_percent)
+      cor.test.gccgcp 
+      cor.test.gccgcp$p.value 
+      #yes, GC cluster numbers correlate with GC percent 
+```
+Does GC$ and total mtDNAlength correlate? (yes)
+```{r}
+FM.gcpl<-lm(data.mtDNA_Y55nuc_complete$Length~data.mtDNA_Y55nuc_complete$GC_percent)
+      anova(FM.gcpl)
+      summary(FM.gcpl) 
+      cor.test.gcpl<-cor.test(data.mtDNA_Y55nuc_complete$GC_percent,data.mtDNA_Y55nuc_complete$Length)
+      cor.test.gcpl 
+      cor.test.gcpl$p.value 
+      #yes, GC percent and mtDNA length correlate
+```
+Do GC cluster numbers (total) correlate with total mtDNA length? (yes)
+```{r}
+ # do the total number of GC clusters correlate with mtDNA length?
+      FM.gcc.length<-lm(data.mtDNA_Y55nuc_complete$Length~data.mtDNA_Y55nuc_complete$TotalGCcount)
+      anova(FM.gcc.length) 
+      summary(FM.gcc.length) 
+      Anova(FM.gcc.length) 
+      cor.test.gccl<-cor.test(data.mtDNA_Y55nuc_complete$TotalGCcount,data.mtDNA_Y55nuc_complete$Length)
+      cor.test.gccl 
+      cor.test.gccl$p.value
+      #yes, GC% correlates with total mtDNA length
+```
+Does total intron length correlate with total mtDNA length? (yes)
+```{r}
+FM.ibp.length<-lm(data.mtDNA_Y55nuc_complete$Length~data.mtDNA_Y55nuc_complete$total_intronlength)
+      anova(FM.ibp.length) 
+      summary(FM.ibp.length) 
+      Anova(FM.ibp.length) 
+      cor.test.ibp<-cor.test(data.mtDNA_Y55nuc_complete$total_intronlength,data.mtDNA_Y55nuc_complete$Length)
+      cor.test.ibp 
+      cor.test.ibp$p.value 
+      #yes, intron lengths correlate with total mtDNA length
+  
+```
+Does total intron length correlate with total GC cluster count? (no)
+```{r}
+FM.ibpgcc<-lm(data.mtDNA_Y55nuc_complete$total_intronlength~data.mtDNA_Y55nuc_complete$TotalGCcount)
+      anova(FM.ibpgcc) 
+      summary(FM.ibpgcc) 
+      cor.test.ibpgcc<-cor.test(data.mtDNA_Y55nuc_complete$TotalGCcount,data.mtDNA_Y55nuc_complete$total_intronlength)
+      cor.test.ibpgcc
+      cor.test.ibpgcc$p.value 
+      #no, the total intron length does not correlate with GC cluster count
+```
+Does total intron length correlate with total GC percent? (no)
+```{r}
+FM.ibpgcp<-lm(data.mtDNA_Y55nuc_complete$total_intronlength~data.mtDNA_Y55nuc_complete$GC_percent)
+      anova(FM.ibpgcp) 
+      summary(FM.ibpgcp) 
+      cor.test.ibpgcp<-cor.test(data.mtDNA_Y55nuc_complete$GC_percent,data.mtDNA_Y55nuc_complete$total_intronlength)
+      cor.test.ibpgcp 
+      cor.test.ibpgcp$p.value 
+      #no, the total intron length does not correlate with GC cluster count
+```
+Do petite frequencies correlate with total GC cluster numbers? (no)
+```{r}
+ #Pet vs TotalGC cluster
+        RM.GCcluster<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$TotalGCcount)
+        anova(RM.GCcluster) 
+        summary(RM.GCcluster) 
+        Anova(RM.GCcluster) 
+        cor.test.gcc<-cor.test(data.mtDNA_Y55nuc_complete$TotalGCcount,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.gcc 
+        cor.test.gcc$p.value 
+        cor.test.gcc.p<-round(cor.test.gcc$p.value,3)
+        cor.test.gcc.p 
+        #no, petite frequency does not correlate with total GC cluster numbers
+```
+Do petite frequencies correlate with total mtDNA length? (no)
+```{r}
+  #Pet vs. Length
+        RM.Length<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$Length)
+        anova(RM.Length) 
+        summary(RM.Length) 
+        Anova(RM.Length) 
+        cor.test.tbp<-cor.test(data.mtDNA_Y55nuc_complete$Length,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.tbp 
+        cor.test.tbp$p.value 
+        cor.test.tbp.p<-round(cor.test.tbp$p.value,3)
+        cor.test.tbp.p 
+        #no, petite frequency does not correlate with total mtDNA length
+```
+Do petite frequencies correlate with intron lengths? (no)
+```{r}
+        #Pet vs. Intron Length
+        RM.intronbp<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$total_intronlength)
+        anova(RM.intronbp) 
+        summary(RM.intronbp) 
+        Anova(RM.intronbp)
+        cor.test.ibppet<-cor.test(data.mtDNA_Y55nuc_complete$total_intronlength,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.ibppet 
+        cor.test.ibppet$p.value 
+        #no, total intron length does not correlate with petfreq
+```
+Do petite frequencies correlate with specific GC cluster types? (only M4 class)
+
+```{r}
+        #M1 cluster vs. petfreq_mean
+        RM.M1<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M1)
+        anova(RM.M1) 
+        summary(RM.M1) 
+        Anova(RM.M1) 
+        cor.test.m1<-cor.test(data.mtDNA_Y55nuc_complete$M1,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m1 
+        cor.test.m1$p.value 
+        cor.test.m1.p<-round(cor.test.m1$p.value,3)
+        cor.test.m1.p 
+        #not significant
+        
+        #M2 cluster vs. petfreq_mean
+        RM.M2<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M2)
+        anova(RM.M2) 
+        summary(RM.M2) 
+        Anova(RM.M2)
+        cor.test.m2<-cor.test(data.mtDNA_Y55nuc_complete$M2,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m2
+        cor.test.m2$p.value
+        cor.test.m2.p<-round(cor.test.m2$p.value,3)
+        cor.test.m2.p 
+        #not significant
+        
+        #M3 cluster vs. petfreq_mean
+        RM.M3<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M3)
+        anova(RM.M3) 
+        summary(RM.M3) 
+        Anova(RM.M3) 
+        cor.test.m3<-cor.test(data.mtDNA_Y55nuc_complete$M3,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m3
+        cor.test.m3$p.value  
+        cor.test.m3.p<-round(cor.test.m3$p.value,3)
+        cor.test.m3.p 
+        #not significant
+        
+        #M4 vs. pet freq
+        RM.M4<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M4)
+        anova(RM.M4) 
+        summary(RM.M4) 
+        Anova(RM.M4) 
+        cor.test.m4<-cor.test(data.mtDNA_Y55nuc_complete$M4,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m4 
+        cor.test.m4$p.value 
+        cor.test.m4.p<-round(cor.test.m4$p.value,3)
+        cor.test.m4.p 
+        #significant ** Fig 2B
+        
+        #M1p vs. petfreq_mean
+        #RAW
+        RM.M1p<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M1p)
+        anova(RM.M1p)
+        summary(RM.M1p) 
+        Anova(RM.M1p) 
+        cor.test.m1p<-cor.test(data.mtDNA_Y55nuc_complete$M1p,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m1p
+        cor.test.m1p$p.value 
+        cor.test.m1p.p<-round(cor.test.m1p$p.value,3)
+        cor.test.m1p.p 
+        #not significant
+        
+        #M2p cluster vs. petfreq_mean
+        RM.M2p<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M2p)
+        anova(RM.M2p) 
+        summary(RM.M2p) 
+        Anova(RM.M2p)
+        cor.test.m2p<-cor.test(data.mtDNA_Y55nuc_complete$M2p,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m2p
+        cor.test.m2p$p.value 
+        cor.test.m2p.p<-round(cor.test.m2p$p.value,3)
+        cor.test.m2p.p
+        #not significant
+        
+        #M2pp cluster vs. petfreq_mean
+        RM.M2pp<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$M2pp)
+        anova(RM.M2pp)
+        summary(RM.M2pp)
+        Anova(RM.M2pp) 
+        cor.test.m2pp<-cor.test(data.mtDNA_Y55nuc_complete$M2pp,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.m2pp
+        cor.test.m2pp$p.value
+        cor.test.m2pp.p<-round(cor.test.m2pp$p.value,3)
+        cor.test.m2pp.p
+        
+        #G cluster vs. petfreq_mean
+        RM.G<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$G)
+        anova(RM.G)
+        summary(RM.G)
+        Anova(RM.G) 
+        cor.test.G<-cor.test(data.mtDNA_Y55nuc_complete$G,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.G
+        cor.test.G$p.value 
+        cor.test.G.p<-round(cor.test.G$p.value,3)
+        cor.test.G.p
+        #not significant
+        
+        #V cluster vs. petfreq_mean
+        RM.V<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$V)
+        anova(RM.V)
+        summary(RM.V)
+        Anova(RM.V) 
+        cor.test.V<-cor.test(data.mtDNA_Y55nuc_complete$V,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.V
+        cor.test.V$p.value 
+        cor.test.V.p<-round(cor.test.V$p.value,3)
+        cor.test.V.p
+        #not significant
+        
+        #U cluster vs. petfreq_mean
+        RM.U<-lm(data.mtDNA_Y55nuc_complete$petfreq_mean~data.mtDNA_Y55nuc_complete$U)
+        anova(RM.U)
+        summary(RM.U)
+        Anova(RM.U)
+        cor.test.U<-cor.test(data.mtDNA_Y55nuc_complete$U,data.mtDNA_Y55nuc_complete$petfreq_mean)
+        cor.test.U
+        cor.test.U$p.value
+        cor.test.U.p<-round(cor.test.U$p.value,3)
+        cor.test.U.p
+        #not significant
+```
+
+### Fig 2C
+#### Strains with original or Y55 mtDNAs
+Boxplot of petite frequencies for strains with their original mtDNAs or the mtDNA from Y55
+
+##### import and prepare data
+```{r}
+data.Y55.OG<-read.csv("data.Y55.OG.csv", header = TRUE, stringsAsFactors = FALSE)
+str(data.Y55.OG)
+#set factors
+data.Y55.OG$StrainID<-as.factor(data.Y55.OG$StrainID)
+data.Y55.OG$Nuclear<-as.factor(data.Y55.OG$Nuclear)
+data.Y55.OG$NucPop<-as.factor(data.Y55.OG$NucPop)
+data.Y55.OG$Mito<-as.factor(data.Y55.OG$Mito)
+data.Y55.OG$MitoPop<-as.factor(data.Y55.OG$MitoPop)
+data.Y55.OG$og_v_syn<-as.factor(data.Y55.OG$og_v_syn)
+data.Y55.OG$Genotype<-as.factor(data.Y55.OG$Genotype)
+#set classes
+data.Y55.OG$Petite<-as.numeric(data.Y55.OG$Petite)
+data.Y55.OG$Grande<-as.numeric(data.Y55.OG$Grande)
+data.Y55.OG$Total<-as.numeric(data.Y55.OG$Total)
+#subset to compare each nuclear genotype with original vs. Y55 mtDNA
+#not elegant but effective
+data1<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="Y55")
+data2<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="SK1")
+data3<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="NCYC110")
+data4<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="DBVPG6044")
+data5<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="Y12")
+data6<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="YPS606")
+data7<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="BC187")
+data8<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="YJM975")
+data9<-subset(data.Y55.OG,data.Y55.OG$Nuclear=="YJM981")
+
+
+```
+
+### Fig 2C plot
+
+```{r}
+p<-ggplot(data.Y55.OG, aes(x = Nuclear, y = PetFreq, linetype = factor(og_v_syn), fill = factor(NucPop))) + 
+  geom_boxplot(aes(fill = NucPop))+
+  theme_bw()+ 
+  theme(plot.background = element_blank(),panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(),panel.border = element_blank() ) +
+  theme(axis.line = element_line(color = 'black'))+
+  theme(axis.text.x = element_text(size = 8))+
+  scale_fill_manual(name = "NucPop", values = cbbPalette2)+
+  scale_alpha_manual(name = "og_v_syn", values = c(1, 0.8)) +
+  scale_linetype_manual(name = "og_v_syn", values = c("solid", "dotted"))+
+  xlab("Nuclear genotype")+ ylab("Petite frequency (%)")+
+  theme(legend.position = "right")+
+  guides(fill=guide_legend(title="Population"))+
+  theme(legend.position = "right")
+p
+```
+#### Fig 2C Stats
+Is there a difference between the petite frequencies of SK1nuc + SK1mt vs. SK1nuc +Y55mt?
+```{r}
+FM.cbind.SK1<-glm(cbind(Petite,Grande)~og_v_syn,data=data2, family=binomial)
+anova(FM.cbind.SK1, test="Chisq") #P=0.02 *
+```
+Is there a difference between the petite frequencies of NCYC110nuc + NCYC110mt vs. NCYC110nuc +Y55mt?
+```{r}
+FM.cbind.NCYC110<-glm(cbind(Petite,Grande)~og_v_syn,data=data3, family=binomial)
+anova(FM.cbind.NCYC110, test="Chisq") #P<0.001 ***
+```
+Is there a difference between the petite frequencies of DBVPG6044nuc + DBVPG6044mt vs. DBVPG6044nuc +Y55mt?
+```{r}
+FM.cbind.DBVPG6044<-glm(cbind(Petite,Grande)~og_v_syn,data=data4, family=binomial)
+anova(FM.cbind.DBVPG6044, test="Chisq") #P = 0.144 ns
+```
+Is there a difference between the petite frequencies of Y12nuc + Y12mt vs. Y12nuc +Y55mt?
+```{r}
+FM.cbind.Y12<-glm(cbind(Petite,Grande)~og_v_syn,data=data5, family=binomial)
+anova(FM.cbind.Y12, test="Chisq") #P=0.007 **
+```
+Is there a difference between the petite frequencies of YPS606nuc + YPS606mt vs. YPS606nuc +Y55mt?
+```{r}
+FM.cbind.YPS606<-glm(cbind(Petite,Grande)~og_v_syn,data=data6, family=binomial)
+anova(FM.cbind.YPS606, test="Chisq") #P<0.001 ***
+```
+Is there a difference between the petite frequencies of BC187nuc + BC187mt vs. BC187nuc +Y55mt?
+```{r}
+FM.cbind.BC187<-glm(cbind(Petite,Grande)~og_v_syn,data=data7, family=binomial)
+anova(FM.cbind.BC187, test="Chisq") #P=0.20 ns
+```
+Is there a difference between the petite frequencies of YJM975nuc + YJM975mt vs. YJM975nuc +Y55mt?
+```{r}
+FM.cbind.YJM975<-glm(cbind(Petite,Grande)~og_v_syn,data=data8, family=binomial)
+anova(FM.cbind.YJM975, test="Chisq") #P<0.001 ***
+```
+Is there a difference between the petite frequencies of YJM981nuc + YJM981mt vs. YJM981nuc +Y55mt?
+```{r}
+FM.cbind.YJM981<-glm(cbind(Petite,Grande)~og_v_syn,data=data9, family=binomial)
+anova(FM.cbind.YJM981, test="Chisq") #P<0.001 ***
+```
+
+### Figure 3  
+#### Coevolved mitonuclear interactions stabilize mtDNAs.
+
+Analysis of petite frequencies from a 4 nuc x 4 mtDNA mitonuclear collection (16 genotypes).
+All nuc and mtDNAs have West African origins.
+
+
+import data
+```{r}
+data.4x4<-read.csv("data.4x4mtnWA.csv", header = TRUE, stringsAsFactors = FALSE)
+data.4x4$StrainID<-as.factor(data.4x4$StrainID)
+data.4x4$Nuclear<-as.factor(data.4x4$Nuclear)
+data.4x4$NucPop<-as.factor(data.4x4$NucPop)
+data.4x4$Mito<-as.factor(data.4x4$Mito)
+data.4x4$MitoPop<-as.factor(data.4x4$MitoPop)
+data.4x4$og_v_syn<-as.factor(data.4x4$og_v_syn)
+data.4x4$Genotypes<-as.factor(data.4x4$Genotype)
+str(data.4x4)
+```
+#### Interaction Plot
+```{r}
+cbbPalette <- c("#000000", "#009E73","#D55E00","#0072B2")
+
+interaction.plot(data.4x4$Mito,data.4x4$Nuclear,data.4x4$PetFreq,
+                 lwd=2.5,
+                 xlab = "mitotype",ylab = "petite frequency (%)",
+                 ylim=c(0,35),trace.label="Nuclear genotype", type = "b", col=c(cbbPalette),
+                 pch = c(15,17,19,6), fixed =TRUE)
+```
+
+#### Table S5  
+#### ANOVA Petite frequencies influenced by mitonuclear interactions in a 4x4 mitonuclear genotype panel
+
+Analysis of petite frequencies from a 4 nuc x 4 mtDNA mitonuclear collection (16 genotypes).
+All nuc and mtDNAs have West African origins.
+
+ANOVA
+Are there significant nuclear, mtDNA, and mitonuclear interactions in the 4x4 WA collection?
+```{r}
+FM.cbind.test<-glm(cbind(Petite,Grande)~Nuclear*Mito,data=data.4x4, family=binomial)
+anova(FM.cbind.test, test="Chisq")
+```
+### Fig S1  
+#### Strains harboring original mtDNAs have lower petite frequencies than those with synthetic mitonuclear combinations.
+
+Analysis of petite frequencies from a 4 nuc x 4 mtDNA mitonuclear collection (16 genotypes).
+All nuc and mtDNAs have West African origins.
+original = strains with their original, coadapted mtDNA
+synthetic = strains with introduced mtDNAs
+
+```{r}
+cbbPalette3 <- c("original" = "#E69F00","synthetic" ="#999999")
+
+FigS1<-ggplot(data.4x4,aes(x=Nuclear,y=PetFreq,fill=og_v_syn))+geom_boxplot()+
+  theme_bw()+ 
+  theme(plot.background = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank() ) +
+  theme(axis.text.x = element_text(size = 10, face="bold")) +scale_fill_manual(values=cbbPalette3)+
+  theme(axis.title = element_text(size = 12, face="bold"))+
+  xlab("Nuclear Genotype") + ylab("petite frequency (%)")+
+  theme(legend.position = c(0.3,0.8),
+  legend.title=element_text(size=12,face="bold"), 
+  legend.text=element_text(size=10))+
+  guides(fill=guide_legend(title="Mitonuclear combination"))
+FigS1
+```
+#### Fig S1 
+##### anova comparisons
+
+to calculate P values for each comparison of strains with original or synthetic mtn combinations
+
+subset data
+```{r}
+#subset data
+data.DB<-subset(data.4x4,data.4x4$Nuclear=="DBVPG6044")
+data.NC<-subset(data.4x4,data.4x4$Nuclear=="NCYC110")
+data.Y55<-subset(data.4x4,data.4x4$Nuclear=="Y55")
+data.SK1<-subset(data.4x4,data.4x4$Nuclear=="SK1")
+```
+##### FigS1 ANOVA:  DBVPG6044 og vs. syn
+```{r}
+RM.DB<-glm(cbind(Petite,Grande)~og_v_syn/StrainID,data=data.DB, family=binomial)
+anova(RM.DB,test="Chisq")
+```
+##### FigS1 ANOVA:  NCYC110 og vs. syn
+```{r}
+RM.NC<-glm(cbind(Petite,Grande)~og_v_syn/StrainID,data=data.NC, family=binomial)
+anova(RM.NC,test="Chisq")
+```
+##### FigS1 ANOVA:  Y55 og vs. syn
+```{r}
+RM.Y55<-glm(cbind(Petite,Grande)~og_v_syn/StrainID,data=data.Y55, family=binomial)
+anova(RM.Y55,test="Chisq")
+```
+##### FigS1 ANOVA:  SK1 og vs. syn
+```{r}
+RM.SK1<-glm(cbind(Petite,Grande)~og_v_syn/StrainID,data=data.SK1, family=binomial)
+anova(RM.SK1,test="Chisq")
+```
+
+### Figure 6
+#### Mitonuclear interactions influencing mtDNA stability include HGH1 and YAT1.
+
+import and prepare data
+```{r}
+data.ko<-read.csv("parent_v_ko.csv", header = TRUE, stringsAsFactors = FALSE)
+
+#set factors
+data.ko$StrainID<-as.factor(data.ko$StrainID)
+data.ko$Nuclear<-as.factor(data.ko$Nuclear)
+data.ko$Mito<-as.factor(data.ko$Mito)
+data.ko$og_v_syn<-as.factor(data.ko$og_v_syn)
+
+#set classes
+data.ko$Petite<-as.numeric(data.ko$Petite)
+data.ko$Grande<-as.numeric(data.ko$Grande)
+data.ko$Total<-as.numeric(data.ko$Total)
+
+```
+#### Fig 6A
+#### Mitonuclear interactions influencing mtDNA stability include HGH1 and YAT1
+
+examine petite frequency differences in the parental strain BY4741 vs. knockouts
+```{r}
+#first reorder dataset
+data.ko$Nuclear<-factor(data.ko$Nuclear,levels=c("parent","est1D","hgh1D","bns1D","smi1D","yat1D"))
+ 
+Fig6A<-ggplot(data.ko, aes(x=Nuclear, y=Petfreq, fill=Nuclear)) + 
+    geom_violin(trim=FALSE)+theme_bw() +geom_boxplot(width=0.1)+ scale_fill_manual(values=c("#999999", "#D55E00", "#006633","#66CC66","#00FF00","#3399FF"))+theme(legend.position="none")
+Fig6A
+
+```
+##### Fig 6A Anova comparisons
+#####  compare parental strain vs. each knockout
+
+#####  anova  parent vs. est1-delta
+```{r}
+     #subset to parent and est1D
+      data.e<-subset(data.ko,data.ko$Nuclear=="parent"|data.ko$Nuclear=="est1D")
+      str(data.e)
+      wilcox.test(data.e$Petfreq~data.e$Nuclear)   #W=383, p=1.75e-08***
+      
+      FM.e<-lm(data.e$Petfreq~data.e$Nuclear)
+      summary(FM.e)
+      anova(FM.e) #p=1.135e-09***
+      
+      FM.e2<-glm(cbind(data.e$Petite, data.e$Grande)~data.e$Nuclear, family = binomial)
+      anova(FM.e2, test = "Chisq") #p<2.2e-16 ***
+```
+##### anova parent vs. hgh1-delta
+
+```{r}
+ #subset to parent and hgh1
+      data.h<-subset(data.ko,data.ko$Nuclear=="parent"|data.ko$Nuclear=="hgh1D")
+      str(data.h)
+      wilcox.test(data.h$Petfreq~data.h$Nuclear)#W=257 p=0.008369** #warning "cannot compute exact p=value with ties"
+      
+      FM.h<-lm(data.h$Petfreq~data.h$Nuclear)
+      summary(FM.h)
+      anova(FM.h) #p=0.005338**
+      
+      FM.h2<-glm(cbind(data.h$Petite, data.h$Grande)~data.h$Nuclear, family = binomial)
+      anova(FM.h2, test = "Chisq") #p<0.0001307 ***
+```
+##### anova parent vs. bns1-delta   
+```{r}
+ #subset to parent and bns1
+      data.b<-subset(data.ko,data.ko$Nuclear=="parent"|data.ko$Nuclear=="bns1D")
+      str(data.b)
+      wilcox.test(data.b$Petfreq~data.b$Nuclear) #W=217, p=0.6588
+      FM.b<-lm(data.b$Petfreq~data.b$Nuclear)
+      summary(FM.b)
+      anova(FM.b) #p=0.547 ns
+      
+      FM.b2<-glm(cbind(data.b$Petite, data.b$Grande)~data.b$Nuclear, family = binomial)
+      anova(FM.b2, test = "Chisq") #p<0.0.7255 ns
+```
+##### anova parent vs. smi1-delta   
+```{r}
+ #subset to parent and smi1
+      data.s<-subset(data.ko,data.ko$Nuclear=="parent"|data.ko$Nuclear=="smi1D")
+      str(data.s)
+      wilcox.test(data.s$Petfreq~data.s$Nuclear) #W=208, p=0.8392  #warning "cannot compute exact p=value with ties"
+      FM.s<-lm(data.s$Petfreq~data.s$Nuclear)
+      summary(FM.s)
+      anova(FM.s) #p=0.9918 ns
+      FM.s2<-glm(cbind(data.s$Petite, data.s$Grande)~data.s$Nuclear, family = binomial)
+      anova(FM.s2, test = "Chisq") #p<0.0.7886 ns
+```
+##### anova parent vs. yat1-delta        
+
+```{r}
+#subset to parent and yat1
+      data.y<-subset(data.ko,data.ko$Nuclear=="parent"|data.ko$Nuclear=="yat1D")
+      str(data.y)
+      wilcox.test(data.y$Petfreq~data.y$Nuclear) #W=172   p=0.4569   #warning "cannot compute exact p=value with ties"
+      FM.y<-lm(data.y$Petfreq~data.y$Nuclear)
+      summary(FM.y)
+      anova(FM.y) #p=0.4978
+      FM.y2<-glm(cbind(data.y$Petite, data.y$Grande)~data.y$Nuclear, family = binomial)
+      anova(FM.y2, test = "Chisq") #p<0.0.3097 ns
+```
+#### Fig 6B
+#### Petite frequencies of hgh1-delta and yat1-delta strains depend on mitotype. 
+
+import data
+```{r}
+data.ko.mtn<-read.csv("data.ko.phy.mtn.csv", header = TRUE, stringsAsFactors = FALSE)
+
+data.ko.mtn$Mito<-as.factor(data.ko.mtn$Mito)
+     data.ko.mtn$Nuclear<-as.factor(data.ko.mtn$Nuclear)
+      data.ko.mtn$StrainID<-as.factor(data.ko.mtn$StrainID)
+      data.ko.mtn$og_v_syn<-as.factor(data.ko.mtn$og_v_syn)
+      data.ko.mtn$Assay<-as.factor(data.ko.mtn$Assay)
+      data.ko.mtn$Plate<-as.factor(data.ko.mtn$Plate)
+```
+interaction plot
+```{r}
+interaction.plot(data.ko.mtn$Mito,data.ko.mtn$Nuclear,data.ko.mtn$Pet.mean,
+                             xlab = "Mito",ylab = "Petmean",
+                             main = "BY vs HGH1D vs. YAT1D",
+                             ylim=c(0,45),trace.label="nuclear", type = "b", col=c("green","black","blue"),
+                             pch = c(15,17), fixed =TRUE)
+```
+##### Fig 6B and Table S10 Statistics
+##### Table S10 anovas
+###### Table S10 anova on full dataset
+```{r}
+
+      FM.ko.mtn.cbind<-glm(cbind(data.ko.mtn$Petite, data.ko.mtn$Grande)~data.ko.mtn$Nuclear*data.ko.mtn$Mito, family = binomial)
+      anova(FM.ko.mtn.cbind, test = "Chisq")
+
+```
+###### anova: pairwise comparisons 
+
+###### subset data for each pairwise test  
+```{r}
+data.ph<-subset(data.ko.mtn,data.ko.mtn$Nuclear=="parent"|data.ko.mtn$Nuclear=="hgh1D")
+data.phPN<-subset(data.ph,data.ph$Mito=="BY4741"|data.ph$Mito=="NCYC110")
+data.phPY<-subset(data.ph,data.ph$Mito=="BY4741"|data.ph$Mito=="YPS606")
+
+data.py<-subset(data.ko.mtn,data.ko.mtn$Nuclear=="parent"|data.ko.mtn$Nuclear=="yat1D")
+data.pyPN<-subset(data.py,data.py$Mito=="BY4741"|data.py$Mito=="NCYC110")
+data.pyPY<-subset(data.py,data.py$Mito=="BY4741"|data.py$Mito=="YPS606")
+```
+###### Table S10
+###### Parental vs. hgh1∆
+###### mtDNA comparison: BY4741 vs NCYC110
+```{r}
+FM.phPN.cbind<-glm(cbind(data.phPN$Petite, data.phPN$Grande)~data.phPN$Nuclear*data.phPN$Mito, family = binomial)
+      anova(FM.phPN.cbind, test = "Chisq") 
+```
+###### Table S10
+###### Parental vs. hgh1∆
+###### mtDNA comparison: BY4741 vs YPS606
+```{r}
+FM.phPY.cbind<-glm(cbind(data.phPY$Petite, data.phPY$Grande)~data.phPY$Nuclear*data.phPY$Mito, family = binomial)
+      anova(FM.phPY.cbind, test = "Chisq") 
+```
+###### Table S10
+###### Parental vs. yat1∆
+###### mtDNA comparison: BY4741 vs NCYC110
+```{r}
+FM.pyPN.cbind<-glm(cbind(data.pyPN$Petite, data.pyPN$Grande)~data.pyPN$Nuclear*data.pyPN$Mito, family = binomial)
+      anova(FM.pyPN.cbind, test = "Chisq") 
+```
+###### Table S10
+###### Parental vs. yat1∆
+###### mtDNA comparison: BY4741 vs YPS606
+```{r}
+FM.pyPY.cbind<-glm(cbind(data.pyPY$Petite, data.pyPY$Grande)~data.pyPY$Nuclear*data.pyPY$Mito, family = binomial)
+      anova(FM.pyPY.cbind, test = "Chisq") 
+
+```
+
+#### Fig S4
+#### Mitonuclear effects of bns1-delta, smi1-delta and hgh1-delta on Petite frequencies
+
+```{r}
+
+#import data
+data.ko.mtn.bhg<-read.csv("data.ko.mtn.rollerassays_bns1smi1hgh1.csv", header = TRUE, stringsAsFactors = FALSE)
+data.ko.mtn.bhg$Mitotype<-as.factor(data.ko.mtn.bhg$Mitotype)
+data.ko.mtn.bhg$GeneKO<-as.factor(data.ko.mtn.bhg$GeneKO)
+#set classes
+data.ko.mtn.bhg$Petite<-as.integer(data.ko.mtn.bhg$Petite)
+data.ko.mtn.bhg$Grande<-as.integer(data.ko.mtn.bhg$Grande)
+data.ko.mtn.bhg$Total<-as.integer(data.ko.mtn.bhg$Total)
+```
+####
+interaction plot
+```{r}
+interaction.plot(data.ko.mtn.bhg$Mitotype ,data.ko.mtn.bhg$GeneKO ,data.ko.mtn.bhg$Pet.Mean,
+                 xlab = "Mitotype",ylab = "Mean Petite Frequency",
+                 main = "Fig S5",
+                 ylim=c(0,30),trace.label="Nuclear", type = "b", col=c("green","black","blue","orange"),
+                 pch = c(15,17), fixed =TRUE)
+```
+
+##### Table S11 stats
+###### Table S10 anova on full dataset
+```{r}
+
+      FM.ko.mtn.bhg.cbind<-glm(cbind(data.ko.mtn.bhg$Petite, data.ko.mtn.bhg$Grande)~data.ko.mtn.bhg$GeneKO*data.ko.mtn.bhg$Mitotype, family = binomial)
+      anova(FM.ko.mtn.bhg.cbind, test = "Chisq")
+
+```
+## Expression Data
+
+import data
+```{r}
+data.rtpcr<-read.table("Relative Expression.txt")
+
+data.rtpcr$Can_Hap<-as.factor(data.rtpcr$Can_Hap)
+data.rtpcr$Mitotype<-as.factor(data.rtpcr$Mitotype)
+data.rtpcr$MIP1_Hap<-as.factor(data.rtpcr$MIP1_Hap)
+```
+
+###Fig S6
+### Does expression correlate with petite frequency?
+##### Plot
+```{r}
+require(ggplot2)
+library(ggplot2)
+# Gene Expression compared to petite frequency. MPI1 = ALL
+BNS1.pf <- ggplot(data.rtpcr, aes(x = BNS1_res, y = Pet_Freq)) + geom_point() + geom_smooth(method = lm) + ggtitle("BNS1") + xlab("Expression") + ylab("Petite Frequency (%)") 
+HGH1.pf <- ggplot(data.rtpcr, aes(x = HGH1_res, y = Pet_Freq)) + geom_point() + geom_smooth(method = lm) + ggtitle("HGH1") + xlab("Expression") + ylab("Petite Frequency (%)")
+SMI1.pf <- ggplot(data.rtpcr, aes(x = SMI1_res, y = Pet_Freq)) + geom_point() + geom_smooth(method = lm) + ggtitle("SMI1") + xlab("Expression") + ylab("Petite Frequency (%)")
+YAT1.pf <- ggplot(data.rtpcr, aes(x = YAT1_res, y = Pet_Freq)) + geom_point() + geom_smooth(method = lm) + ggtitle("YAT1") + xlab("Expression") + ylab("Petite Frequency (%)")
+MIP1.pf <- ggplot(data.rtpcr, aes(x = MIP1_res, y = Pet_Freq)) + geom_point() + geom_smooth(method = lm) + ggtitle("MIP1") + xlab("Expression") + ylab("Petite Frequency (%)")
+
+# combine plots to a single grid 
+require("gridExtra")
+grid.pf <- grid.arrange(BNS1.pf, HGH1.pf, SMI1.pf, YAT1.pf, MIP1.pf, nrow = 2, ncol = 3)
+###
+```
+
+##### stats for Fig S6
+
+```{r}
+# Does expression of MIP1 correlate with petite frequency?? 
+
+# linear model of correlation between expression and petite frequency in MIP1
+lm.mip.pfr <- lm(data.rtpcr$Pet_Freq ~ data.rtpcr$MIP1_res)
+anova.mip.pfr <- anova(lm.mip.pfr)
+anova.mip.pfr
+# p = 0.1229927, no correlation 
+summary(lm.mip.pfr) #R2=0.1422,
+cor.test.mip.pfr<-cor.test(data.rtpcr$Pet_Freq,data.rtpcr$MIP1_res)
+cor.test.mip.pfr #cor=r=0.0.3770298
+cor.test.mip.pfr$p.value #p=0.1229927
+
+# Does expression of BNS1 correlate with petite frequency?
+lm.bns.pfr <- lm(data.rtpcr$Pet_Freq ~ data.rtpcr$BNS1_res)
+anova.bns.pfr <- anova(lm.bns.pfr)
+anova.bns.pfr
+# p = 0.4434, no correlation 
+summary(lm.bns.pfr) #R2=0.03717
+cor.test.bns.pfr<-cor.test(data.rtpcr$Pet_Freq,data.rtpcr$BNS1_res)
+cor.test.bns.pfr #cor=r=0.1927965
+cor.test.bns.pfr$p.value #p=0.4433923
+
+#Does expression of HGH1 correlate with petite frequency?
+lm.hgh.pfr <- lm(data.rtpcr$Pet_Freq ~ data.rtpcr$HGH1_res)
+anova.hgh.pfr <- anova(lm.hgh.pfr)
+anova.hgh.pfr
+# p = 0.07751, no correlation :/
+summary(lm.hgh.pfr) #R2=0.182,
+cor.test.hgh.pfr<-cor.test(data.rtpcr$Pet_Freq,data.rtpcr$HGH1_res)
+cor.test.hgh.pfr #cor=r=0.4265
+cor.test.hgh.pfr$p.value #p=0.0775
+
+#Does expression of SMI1 correlate with petite frequency?
+lm.smi.pfr <- lm(data.rtpcr$Pet_Freq ~ data.rtpcr$SMI1_res)
+anova.smi.pfr <- anova(lm.smi.pfr)
+anova.smi.pfr
+# p = 0.2322, no correlation 
+summary(lm.smi.pfr) #R2=0.08791
+cor.test.smi.pfr<-cor.test(data.rtpcr$Pet_Freq,data.rtpcr$SMI1_res)
+cor.test.smi.pfr #cor=r=0.2964936
+cor.test.smi.pfr$p.value #p=0.2322017
+
+#Does expression of YAT1 correlate with petite frequency?
+lm.yat.pfr <- lm(data.rtpcr$Pet_Freq ~ data.rtpcr$YAT1_res)
+anova.yat.pfr <- anova(lm.yat.pfr)
+anova.yat.pfr
+# p = 0.4723, no correlation
+summary(lm.yat.pfr) #R2=0.03276
+cor.test.yat.pfr<-cor.test(data.rtpcr$Pet_Freq,data.rtpcr$YAT1_res)
+cor.test.yat.pfr #cor=r=0.0.181
+cor.test.yat.pfr$p.value #p=0.47227
+```
+
+### Fig S7  
+#### Expression based on mitonuclear candidate haplotypes or MIP1 haplotype
+
+##### plot
+
+```{r}
+#Fig S7
+require(ggplot2)
+library(ggplot2)
+
+# Gene Expression in Candidate Haplotypes (DDDA, GAID)
+BNS1.Can <- ggplot(data.rtpcr, aes(x = Can_Hap, y = BNS1_res)) + geom_boxplot() + ggtitle("BNS1") + xlab("MtN Hap") + ylab(NULL)
+HGH1.Can <- ggplot(data.rtpcr, aes(x = Can_Hap, y = HGH1_res)) + geom_boxplot() + ggtitle("HGH1") + xlab("MtN Hap") + ylab("Normalized Expression (residuals)")
+SMI1.Can <- ggplot(data.rtpcr, aes(x = Can_Hap, y = SMI1_res)) + geom_boxplot() + ggtitle("SMI1") + xlab("MtN Hap") + ylab(NULL)
+YAT1.Can <- ggplot(data.rtpcr, aes(x = Can_Hap, y = YAT1_res)) + geom_boxplot() + ggtitle("YAT1") + xlab("MtN Hap") + ylab(NULL)
+MIP1.Can <- ggplot(data.rtpcr, aes(x = Can_Hap, y = MIP1_res)) + geom_boxplot() + ggtitle("MIP1") + xlab("MtN Hap") + ylab(NULL)
+
+
+# Gene Expression in MIP1 Haplotypes (GGC, TAT)
+BNS1.MIP1_Hap <- ggplot(data.rtpcr, aes(x = MIP1_Hap, y = BNS1_res)) + geom_boxplot() + ggtitle("BNS1") + xlab("MIP1 Hap") + ylab(NULL)
+HGH1.MIP1_Hap <- ggplot(data.rtpcr, aes(x = MIP1_Hap, y = HGH1_res)) + geom_boxplot() + ggtitle("HGH1") + xlab("MIP1 Hap") + ylab("Normalized Expression (residuals)")
+SMI1.MIP1_Hap <- ggplot(data.rtpcr, aes(x = MIP1_Hap, y = SMI1_res)) + geom_boxplot() + ggtitle("SMI1") + xlab("MIP1 Hap") + ylab(NULL)
+YAT1.MIP1_Hap <- ggplot(data.rtpcr, aes(x = MIP1_Hap, y = YAT1_res)) + geom_boxplot() + ggtitle("YAT1") + xlab("MIP1 Hap") + ylab(NULL)
+MIP1.MIP1_Hap <- ggplot(data.rtpcr, aes(x = MIP1_Hap, y = MIP1_res)) + geom_boxplot() + ggtitle("MIP1") + xlab("MIP1 Hap") + ylab(NULL)
+
+require("gridExtra")
+grid.CAN<-grid.arrange(HGH1.Can, BNS1.Can, SMI1.Can, YAT1.Can, MIP1.Can, nrow = 1, ncol = 5)
+grid.MIP1.hap <- grid.arrange(HGH1.MIP1_Hap,BNS1.MIP1_Hap,SMI1.MIP1_Hap,YAT1.MIP1_Hap, MIP1.MIP1_Hap, nrow = 1, ncol = 5)
+
+plotcombined<-ggarrange(grid.CAN,grid.MIP1.hap, 
+                         labels = c("A", "B"),
+                         ncol = 1, nrow = 2, align = "h")
+plotcombined
+```
+
+### Table S12 
+##### P values from these analyses shown on Fig S7  
+```{r}
+
+# Is expression of MIP1 influenced by it's haplotype, the haplotype of the mitonuclear candidates, mitotype or any interaction? 
+lm.exp.mip <- lm(data.rtpcr$MIP1_res ~ (data.rtpcr$Can_Hap * data.rtpcr$Mitotype * data.rtpcr$MIP1_Hap))
+anova.exp.mip <- anova(lm.exp.mip)
+anova.exp.mip
+# Is expression of BNS11 influenced by it's haplotype, the haplotype of the mitonuclear candidates, mitotype or any interaction? 
+
+lm.exp.bns <- lm(data.rtpcr$BNS1_res ~ (data.rtpcr$Can_Hap * data.rtpcr$Mitotype * data.rtpcr$MIP1_Hap))
+anova.exp.bns <- anova(lm.exp.bns)
+anova.exp.bns
+
+
+# Is expression of HGH11 influenced by it's haplotype, the haplotype of the mitonuclear candidates, mitotype or any interaction? 
+
+lm.exp.hgh <- lm(data.rtpcr$HGH1_res ~ (data.rtpcr$Can_Hap * data.rtpcr$Mitotype * data.rtpcr$MIP1_Hap))
+anova.exp.hgh <- anova(lm.exp.hgh)
+anova.exp.hgh
+
+
+# Is expression of SMI1 influenced by it's haplotype, the haplotype of the mitonuclear candidates, mitotype or any interaction? 
+
+lm.exp.smi <- lm(data.rtpcr$SMI1_res ~ (data.rtpcr$Can_Hap * data.rtpcr$Mitotype * data.rtpcr$MIP1_Hap))
+anova.exp.smi <- anova(lm.exp.smi)
+anova.exp.smi
+
+
+#  Is expression of YAT1 influenced by it's haplotype, the haplotype of the mitonuclear candidates, mitotype or any interaction? 
+
+lm.exp.yat <- lm(data.rtpcr$YAT1_res ~  (data.rtpcr$Can_Hap * data.rtpcr$Mitotype * data.rtpcr$MIP1_Hap))
+anova.exp.yat <- anova(lm.exp.yat)
+anova.exp.yat
+
+```
+
+
+
+
+
+
+
+

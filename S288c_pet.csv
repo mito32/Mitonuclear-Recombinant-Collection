@@ -1,0 +1,3 @@
+StrainID,Nuclear,NucPop,Mito,MitoPop,Ploidy,og_v_syn,Genotype,Petite,Grande,Total,PetFreq
+ML1x1UA,S288c,mosaic,S288c,mosaic,Haploid,original,MATxura3arg8::URA3,4008,4417,8425,47.57
+ML1x1UA,S288c,mosaic,S288c,mosaic,Haploid,original,MATxura3arg8::URA3,1267,1212,2479,51.11
